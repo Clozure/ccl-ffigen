@@ -149,6 +149,28 @@ void process_macro_definition(CXCursor cursor, CXString filename, unsigned line)
     }
 }
 
+void process_enum_decl(CXCursor cursor, CXString ident)
+{
+    int is_inside_enum = 1;
+    printf("(enum (\"\" 0)\n");
+    printf(" \"%s\" (", clang_getCString(ident));
+    clang_visitChildren(cursor, visit_func, &is_inside_enum);
+    printf("))\n");
+    is_inside_enum = 0;
+    clang_visitChildren(cursor, visit_func, &is_inside_enum);
+}
+
+void process_enum_constant_decl(CXCursor cursor, CXString ident, int is_inside_enum)
+{
+    const char * name = clang_getCString(ident);
+    long long value = clang_getEnumConstantDeclValue(cursor);
+    if (is_inside_enum) {
+        printf("(\"%s\" %lld)", name, value);
+    } else {
+        printf("(enum-ident (\"\" 0)\n (\"%s\" %lld))\n", name, value);
+    }
+}
+
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data)
 {
     CXSourceLocation location = clang_getCursorLocation(cursor);
@@ -165,6 +187,10 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
             process_macro_definition(cursor, filename, line);
             break;
         case CXCursor_EnumDecl:
+            process_enum_decl(cursor, ident);
+            break;
+        case CXCursor_EnumConstantDecl:
+            process_enum_constant_decl(cursor, ident, *(int *)client_data);
             break;
     }
     // clang_visitChildren(cursor, visit_func, NULL);
