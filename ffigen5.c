@@ -4,71 +4,6 @@
 #include <ctype.h>
 #include <clang-c/Index.h>
 
-typedef struct {
-    const char *clang_name;
-    const char *ffi_name;
-} ffi_primitive_name_map;
-
-static ffi_primitive_name_map ffi_primitive_names[] =
-{
-    {"int", "int"}, 
-    {"char", "char"},
-    {"float", "float"},
-    {"double", "double"},
-    {"long double", "long-double"}, 
-    {"void", "void"},
-    {"long int", "long"}, 
-    {"unsigned int", "unsigned"}, 
-    {"long unsigned int", "unsigned-long"}, 
-    {"long long int", "long-long"}, 
-    {"long long unsigned int", "unsigned-long-long"}, 
-    {"short int", "short"}, 
-    {"short unsigned int", "unsigned-short"}, 
-    {"signed char", "signed-char"}, 
-    {"unsigned char", "unsigned-char"}, 
-    {"complex int", "complex-int"},
-    {"complex float", "complex-float"},
-    {"complex double", "complex-double"},
-    {"complex long double", "complex-long-double"},
-    {"__vector unsigned char", "__vector-unsigned-char"},
-    {"__vector signed char", "__vector-signed-char"},
-    {"__vector bool char", "__vector-bool-char"},
-    {"__vector unsigned short", "__vector-unsigned-short"},
-    {"__vector signed short", "__vector-signed-short"},
-    {"__vector bool short", "__vector-bool-short"},
-    {"__vector unsigned long", "__vector-unsigned-long"},
-    {"__vector signed long", "__vector-signed-long"},
-    {"__vector bool long", "__vector-bool-long"},
-    {"__vector float", "__vector-short-float"},
-    {"__vector pixel", "__vector-pixel"},
-    {"__vector", "__vector"},  
-    {"_Bool", "unsigned"},
-    {"__int128_t", "long-long-long"}, 
-    {"__uint128_t", "unsigned-long-long-long"}, 
-    {NULL, NULL}
-};
-
-/* Return the Lisp'y name for the type GCC_NAME */
-static char *
-to_primitive_type_name (const char* clang_name)
-{
-  ffi_primitive_name_map *map = ffi_primitive_names;
-  for (; map->clang_name; ++map)
-    if (!strcmp (map->clang_name, clang_name))
-      return (char*)map->ffi_name;
-  fprintf(stderr, "Bug: couldn't find primitive name for %s\n", clang_name);
-  exit(-1);
-}
-
-char * ffi_primitive_type_name (CXCursor decl)
-{
-  CXType type = clang_getCursorType(decl);
-  CXString type_str = clang_getTypeSpelling(type);
-  char * result = to_primitive_type_name(clang_getCString(type_str));
-  clang_disposeString(type_str);
-  return result;
-}
-
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data);
 
 char * get_macro_definition(CXCursor cursor, CXString filename)
@@ -226,14 +161,31 @@ int is_primitive_type(enum CXTypeKind kind)
            kind == CXType_Vector;
 }
 
+int is_cxx_additional_type(enum CXTypeKind kind)
+{
+    return kind == CXType_Char16 ||
+           kind == CXType_Char32 ||
+           kind == CXType_WChar ||
+           kind == CXType_NullPtr ||
+           kind == CXType_Overload ||
+           kind == CXType_Dependent;
+}
+
+int is_objc_additional_type(enum CXTypeKind kind)
+{
+    return kind == CXType_ObjCId ||
+           kind == CXType_ObjCClass ||
+           kind == CXType_ObjCSel;
+}
+
 int is_c_primitive_type(enum CXTypeKind kind)
 {
     return is_primitive_type(kind) &&
-           kind != CXType_Char16 &&
-           kind != CXType_Char32;
+           !is_cxx_additional_type(kind) &&
+           !is_objc_additional_type(kind);
 }
 
-void format_c_primitive_type(enum CXTypeKind kind)
+void format_c_primitive_type(CXType type, enum CXTypeKind kind)
 {
     static char * map[] = {
         [CXType_Void] = "void",
@@ -245,9 +197,29 @@ void format_c_primitive_type(enum CXTypeKind kind)
         [CXType_ULong] = "unsigned-long",
         [CXType_ULongLong] = "unsigned-long-long",
         [CXType_UInt128] = "unsigned-long-long-long",
-        
+        [CXType_Char_S] = "signed-char",
+        [CXType_SChar] = "signed-char",
+        [CXType_Short] = "short",
+        [CXType_Int] = "int",
+        [CXType_Long] = "long",
+        [CXType_LongLong] = "long-long",
+        [CXType_Int128] = "long-long-long",
+        [CXType_Float] = "float",
+        [CXType_Double] = "double",
+        [CXType_LongDouble] = "long-double"
+        /* TODO: Machine specific types
+         * CXType_Float128: '__float128' in i386, x86_64, IA-64
+         * CXType_Half: 'half' in OpenCL, '__fp16' in ARM NEON.
+         * CXType_Float16: see https://reviews.llvm.org/D33719
+         */
     };
-    fprintf(ffifile, "(%s)", map[CXType_Void]);
+    if (kind == CXType_Complex) {
+        fprintf(ffifile, "(complex-%s ())", map[clang_getElementType(type).kind]);
+    } else if (kind == CXType_Vector) {
+        fprintf(ffifile, "(__vector-%s ())", map[clang_getElementType(type).kind]);
+    } else {
+        fprintf(ffifile, "(%s ())", map[kind]);
+    }
 }
 
 void format_type_reference(CXCursor cursor, CXType type)
@@ -256,7 +228,7 @@ void format_type_reference(CXCursor cursor, CXType type)
     CXString type_name = clang_getTypeKindSpelling(kind);
 
     if (is_c_primitive_type(kind)) {
-        format_c_primitive_type(kind);
+        format_c_primitive_type(type, kind);
         return;
     }
     
