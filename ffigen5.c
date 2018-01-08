@@ -222,7 +222,7 @@ void format_c_primitive_type(CXType type, enum CXTypeKind kind)
     }
 }
 
-void format_type_reference(CXCursor cursor, CXType type)
+void format_type_reference(CXType type)
 {
     enum CXTypeKind kind = type.kind;
     CXString type_name = clang_getTypeKindSpelling(kind);
@@ -233,9 +233,10 @@ void format_type_reference(CXCursor cursor, CXType type)
     }
     
     switch (kind) {
-        case CXType_Complex:
-            break;
         case CXType_Pointer:
+            fprintf(ffifile, "(pointer ");
+            format_type_reference(clang_getPointeeType(type));
+            fprintf(ffifile, ")");
             break;
         case CXType_Record:
             break;
@@ -246,8 +247,6 @@ void format_type_reference(CXCursor cursor, CXType type)
         CXType_FunctionProto:
             break;
         case CXType_ConstantArray:
-            break;
-        case CXType_Vector:
             break;
         default:
             fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_name));
@@ -260,7 +259,7 @@ void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXStrin
     printf("(var (\"%s\" %u)\n", clang_getCString(filename), line);
     printf("  \"%s\"\n", clang_getCString(ident));
     printf("  ");
-    format_type_reference(cursor, type);
+    format_type_reference(type);
     printf(" ");
     format_storage_kind(cursor);
     printf(")\n");
