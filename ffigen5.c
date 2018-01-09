@@ -4,6 +4,14 @@
 #include <ctype.h>
 #include <clang-c/Index.h>
 
+#define FFIGEN_DEBUG
+
+#ifdef FFIGEN_DEBUG
+#define debug_print(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define debug_print(...)
+#endif
+
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data);
 
 char * get_macro_definition(CXCursor cursor, CXString filename)
@@ -39,64 +47,61 @@ char * get_macro_definition(CXCursor cursor, CXString filename)
 static char *
 emit_macro_name (char *p)
 {
-  int in_arglist = 0;
-  char c;
+    int in_arglist = 0;
+    char c;
 
-  putc ('\"', ffifile);
-  while ((c = *p) != 0)
-    {
-      switch (c)
-	{
-	case '(':
-	  in_arglist = 1;
-	  /* Fall down */
-	case ',':
-	  putc (' ', ffifile);
-	  putc (c, ffifile);
-	  putc (' ', ffifile);
-	  break;
+    putc ('\"', ffifile);
+    while ((c = *p) != 0) {
+        switch (c) {
+        case '(':
+            in_arglist = 1;
+            /* Fall down */
+        case ',':
+            putc (' ', ffifile);
+            putc (c, ffifile);
+            putc (' ', ffifile);
+            break;
 
-	case ')':
-	  putc (' ', ffifile);
-	  putc (c, ffifile);
-	  putc ('\"', ffifile);
+        case ')':
+            putc (' ', ffifile);
+            putc (c, ffifile);
+            putc ('\"', ffifile);
 
-	  while (isspace (*++p));
-	  return p;
+            while (isspace (*++p));
+            return p;
 
-	default:
-	  if (isspace (c) && !in_arglist)
-	    {
-	      putc ('\"', ffifile);
-	      while (isspace (*++p));
-	      return p;
-	    }
-	  putc (c, ffifile);
-	}
-      ++p;
+        default:
+            if (isspace (c) && !in_arglist)
+            {
+                putc ('\"', ffifile);
+                while (isspace (*++p));
+                return p;
+            }
+            putc (c, ffifile);
+        }
+        ++p;
     }
-  putc ('\"', ffifile);
-  return p;
+    putc ('\"', ffifile);
+    return p;
 }
 
 static void
 emit_macro_expansion (char *p)
 {
-  char c;
-  char *q = p + strlen (p);
+    char c;
+    char *q = p + strlen (p);
 
-  while ((q > p) && isspace (q[-1])) q--;
-  *q = '\0';
+    while ((q > p) && isspace (q[-1])) q--;
+    *q = '\0';
 
-  fprintf (ffifile, " \"");
+    fprintf (ffifile, " \"");
 
-  while ((c = *p++) != '\0')
-    {
-      if (c == '\"')
-	fputc ('\\', ffifile);
-      fputc (c, ffifile);
+    while ((c = *p++) != '\0') {
+        if (c == '\"')
+            fputc ('\\', ffifile);
+        fputc (c, ffifile);
     }
-  fputc ('\"', ffifile);
+    fputc ('\"', ffifile);
 }
 
 #define PREDEFINED_HEADER_PATH "/tmp/ffigen-predefined-macro.h"
@@ -109,9 +114,9 @@ void process_macro_definition(CXCursor cursor, CXString filename, unsigned line)
         char * definition = get_macro_definition(cursor, filename);
         int is_predefined_header = (strcmp(filename_s, PREDEFINED_HEADER_PATH) == 0);
         printf("(macro (\"%s\" %u) ",
-            is_predefined_header ? "" : filename_s,
-            is_predefined_header ? 1 : line
-        );
+               is_predefined_header ? "" : filename_s,
+               is_predefined_header ? 1 : line
+            );
         emit_macro_expansion(emit_macro_name(definition));
         printf(")\n");
         free(definition);
@@ -157,32 +162,32 @@ int is_builtin_type(enum CXTypeKind kind)
 int is_primitive_type(enum CXTypeKind kind)
 {
     return is_builtin_type(kind) ||
-           kind == CXType_Complex ||
-           kind == CXType_Vector;
+        kind == CXType_Complex ||
+        kind == CXType_Vector;
 }
 
 int is_cxx_additional_type(enum CXTypeKind kind)
 {
     return kind == CXType_Char16 ||
-           kind == CXType_Char32 ||
-           kind == CXType_WChar ||
-           kind == CXType_NullPtr ||
-           kind == CXType_Overload ||
-           kind == CXType_Dependent;
+        kind == CXType_Char32 ||
+        kind == CXType_WChar ||
+        kind == CXType_NullPtr ||
+        kind == CXType_Overload ||
+        kind == CXType_Dependent;
 }
 
 int is_objc_additional_type(enum CXTypeKind kind)
 {
     return kind == CXType_ObjCId ||
-           kind == CXType_ObjCClass ||
-           kind == CXType_ObjCSel;
+        kind == CXType_ObjCClass ||
+        kind == CXType_ObjCSel;
 }
 
 int is_c_primitive_type(enum CXTypeKind kind)
 {
     return is_primitive_type(kind) &&
-           !is_cxx_additional_type(kind) &&
-           !is_objc_additional_type(kind);
+        !is_cxx_additional_type(kind) &&
+        !is_objc_additional_type(kind);
 }
 
 void format_c_primitive_type(CXType type, enum CXTypeKind kind)
@@ -222,6 +227,16 @@ void format_c_primitive_type(CXType type, enum CXTypeKind kind)
     }
 }
 
+CXType getPointeeType(CXType type)
+{
+    CXType pointee_type = clang_getPointeeType(type);
+    if (pointee_type.kind == CXType_Unexposed) {
+        debug_print("Debug: libclang unexposed symbol.\n");
+        pointee_type.kind = CXType_Void;
+    }
+    return pointee_type;
+}
+
 void format_type_reference(CXType type)
 {
     enum CXTypeKind kind = type.kind;
@@ -233,23 +248,23 @@ void format_type_reference(CXType type)
     }
 
     switch (kind) {
-        case CXType_Pointer:
-            fprintf(ffifile, "(pointer ");
-            format_type_reference(clang_getPointeeType(type));
-            fprintf(ffifile, ")");
-            break;
-        case CXType_Record:
-            break;
-        case CXType_Enum:
-            break;
-        case CXType_Typedef:
-            break;
-        case CXType_FunctionProto:
-            break;
-        case CXType_ConstantArray:
-            break;
-        default:
-            fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_name));
+    case CXType_Pointer:
+        fprintf(ffifile, "(pointer ");
+        format_type_reference(getPointeeType(type));
+        fprintf(ffifile, ")");
+        break;
+    case CXType_Record:
+        break;
+    case CXType_Enum:
+        break;
+    case CXType_Typedef:
+        break;
+    case CXType_FunctionProto:
+        break;
+    case CXType_ConstantArray:
+        break;
+    default:
+        fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_name));
     }
     clang_disposeString(type_name);
 }
@@ -279,28 +294,28 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
     switch(cursor_kind) {
         /* currently libclang has no way to access #undef,
          * fortunately it's also ignored in parse-ffi.lisp */
-        case CXCursor_MacroDefinition:
-            process_macro_definition(cursor, filename, line);
-            break;
-        case CXCursor_EnumDecl:
-            process_enum_decl(cursor, ident);
-            break;
-        case CXCursor_EnumConstantDecl:
-            process_enum_constant_decl(cursor, ident, *(int *)client_data);
-            break;
-        case CXCursor_StructDecl:
-            break;
-        case CXCursor_UnionDecl:
-            break;
-        case CXCursor_FunctionDecl:
-            break;
-        case CXCursor_VarDecl:
-            process_var_decl(cursor, filename, line, ident, type);
-            break;
-        case CXCursor_TypedefDecl:
-            break;
-        default:
-            break;
+    case CXCursor_MacroDefinition:
+        process_macro_definition(cursor, filename, line);
+        break;
+    case CXCursor_EnumDecl:
+        process_enum_decl(cursor, ident);
+        break;
+    case CXCursor_EnumConstantDecl:
+        process_enum_constant_decl(cursor, ident, *(int *)client_data);
+        break;
+    case CXCursor_StructDecl:
+        break;
+    case CXCursor_UnionDecl:
+        break;
+    case CXCursor_FunctionDecl:
+        break;
+    case CXCursor_VarDecl:
+        process_var_decl(cursor, filename, line, ident, type);
+        break;
+    case CXCursor_TypedefDecl:
+        break;
+    default:
+        break;
     }
     // clang_visitChildren(cursor, visit_func, NULL);
     clang_disposeString(filename);
@@ -316,7 +331,7 @@ void process_predefined_macro_definitions(CXIndex index)
         PREDEFINED_HEADER_PATH, NULL, 0,
         NULL, 0,
         CXTranslationUnit_DetailedPreprocessingRecord
-    );
+        );
     if (unit == NULL) {
         printf("Warning: Unable to get clang predefined header\n");
         return;
@@ -336,7 +351,7 @@ int main(int argc, char *argv[])
         NULL, 0,
         CXTranslationUnit_DetailedPreprocessingRecord |
         CXTranslationUnit_SkipFunctionBodies
-    );
+        );
 
     if (unit == NULL) {
         printf("Unable to parse translation unit. Quitting.\n");
