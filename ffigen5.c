@@ -60,10 +60,10 @@ emit_macro_name (char *p)
 	  putc (' ', ffifile);
 	  putc (c, ffifile);
 	  putc ('\"', ffifile);
-	  
+
 	  while (isspace (*++p));
 	  return p;
-	
+
 	default:
 	  if (isspace (c) && !in_arglist)
 	    {
@@ -84,7 +84,7 @@ emit_macro_expansion (char *p)
 {
   char c;
   char *q = p + strlen (p);
-  
+
   while ((q > p) && isspace (q[-1])) q--;
   *q = '\0';
 
@@ -108,7 +108,7 @@ void process_macro_definition(CXCursor cursor, CXString filename, unsigned line)
     if (filename_s) {
         char * definition = get_macro_definition(cursor, filename);
         int is_predefined_header = (strcmp(filename_s, PREDEFINED_HEADER_PATH) == 0);
-        printf("(macro (\"%s\" %u) ", 
+        printf("(macro (\"%s\" %u) ",
             is_predefined_header ? "" : filename_s,
             is_predefined_header ? 1 : line
         );
@@ -231,7 +231,7 @@ void format_type_reference(CXType type)
         format_c_primitive_type(type, kind);
         return;
     }
-    
+
     switch (kind) {
         case CXType_Pointer:
             fprintf(ffifile, "(pointer ");
@@ -244,7 +244,7 @@ void format_type_reference(CXType type)
             break;
         case CXType_Typedef:
             break;
-        CXType_FunctionProto:
+        case CXType_FunctionProto:
             break;
         case CXType_ConstantArray:
             break;
@@ -323,7 +323,7 @@ void process_predefined_macro_definitions(CXIndex index)
     }
     CXCursor root = clang_getTranslationUnitCursor(unit);
     clang_visitChildren(root, visit_func, NULL);
-    
+
     clang_disposeTranslationUnit(unit);
 }
 
@@ -337,19 +337,19 @@ int main(int argc, char *argv[])
         CXTranslationUnit_DetailedPreprocessingRecord |
         CXTranslationUnit_SkipFunctionBodies
     );
-  
+
     if (unit == NULL) {
         printf("Unable to parse translation unit. Quitting.\n");
         exit(-1);
     }
-    
+
     process_predefined_macro_definitions(index);
 
     CXCursor root = clang_getTranslationUnitCursor(unit);
     clang_visitChildren(root, visit_func, NULL);
-    
+
     clang_disposeTranslationUnit(unit);
     clang_disposeIndex(index);
-    
+
     return 0;
 }
