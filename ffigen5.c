@@ -237,10 +237,35 @@ CXType getPointeeType(CXType type)
     return pointee_type;
 }
 
+void format_struct_reference(CXType type)
+{
+    CXCursor struct_def = clang_getTypeDeclaration(type);
+    CXSourceLocation location;
+    unsigned line;
+    CXFile file;
+    CXString filename;
+    CXString struct_name;
+
+    struct_name = clang_getCursorSpelling(struct_def);
+
+    /* It's strange that clang_Cursor_isAnonymous always return 0,
+       so check struct_name instead */
+    if (strlen(clang_getCString(struct_name)) == 0) {
+        location = clang_getCursorLocation(struct_def);
+        clang_getSpellingLocation(location, &file, &line, NULL, NULL);
+        filename = clang_getFileName(file);
+        fprintf(ffifile, "(struct-ref \"%u_%s\")", line, clang_getCString(filename));
+        clang_disposeString(struct_name);
+    } else {
+        fprintf(ffifile, "(struct-ref \"%s\")", clang_getCString(struct_name));
+    }
+    clang_disposeString(struct_name);
+}
+
 void format_type_reference(CXType type)
 {
     enum CXTypeKind kind = type.kind;
-    CXString type_name = clang_getTypeKindSpelling(kind);
+    CXString type_kind_name = clang_getTypeKindSpelling(kind);
 
     if (is_c_primitive_type(kind)) {
         format_c_primitive_type(type, kind);
@@ -253,7 +278,11 @@ void format_type_reference(CXType type)
         format_type_reference(getPointeeType(type));
         fprintf(ffifile, ")");
         break;
+    case CXType_Elaborated:
+        format_type_reference(clang_Type_getNamedType(type));
+        break;
     case CXType_Record:
+        format_struct_reference(type);
         break;
     case CXType_Enum:
         break;
@@ -264,9 +293,9 @@ void format_type_reference(CXType type)
     case CXType_ConstantArray:
         break;
     default:
-        fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_name));
+        fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_kind_name));
     }
-    clang_disposeString(type_name);
+    clang_disposeString(type_kind_name);
 }
 
 void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident, CXType type)
