@@ -264,11 +264,26 @@ CXType getPointeeType(CXType type)
     return pointee_type;
 }
 
-void format_struct_reference(CXType type)
+void format_record_reference(CXType type)
 {
-    CXCursor struct_def = clang_getTypeDeclaration(type);
-    fprintf(ffifile, "(struct-ref \"");
-    format_ident_name(struct_def);
+    CXCursor record_def = clang_getTypeDeclaration(type);
+    enum CXCursorKind cursor_kind = clang_getCursorKind(record_def);
+    CXString record_type;
+
+    switch (cursor_kind) {
+    case CXCursor_UnionDecl:
+        fprintf(ffifile, "(union-ref \"");
+        break;
+    case CXCursor_StructDecl:
+        fprintf(ffifile, "(struct-ref \"");
+        break;
+    default:
+        record_type = clang_getCursorKindSpelling(cursor_kind);
+        fprintf(stderr, "Error: unkonwn record type: %s", clang_getCString(record_type));
+        clang_disposeString(record_type);
+    }
+
+    format_ident_name(record_def);
     fprintf(ffifile, "\")");
 }
 
@@ -308,15 +323,13 @@ void format_type_reference(CXType type)
         format_type_reference(clang_Type_getNamedType(type));
         break;
     case CXType_Record:
-        format_struct_reference(type);
+        format_record_reference(type);
         break;
     case CXType_Enum:
         format_enum_reference(type);
         break;
     case CXType_Typedef:
         format_typedef_reference(type);
-        break;
-    case CXType_FunctionProto:
         break;
     case CXType_ConstantArray:
         break;
