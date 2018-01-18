@@ -134,8 +134,6 @@ void format_ident_name(CXCursor cursor)
 
     name = clang_getCursorSpelling(cursor);
 
-    /* It's strange that clang_Cursor_isAnonymous always return 0,
-       so check name instead */
     if (strlen(clang_getCString(name)) == 0) {
         location = clang_getCursorLocation(cursor);
         clang_getSpellingLocation(location, &file, &line, NULL, NULL);
@@ -303,6 +301,16 @@ void format_typedef_reference(CXType type)
     fprintf(ffifile, "\")");
 }
 
+void format_type_reference(CXType type);
+void format_array(CXType type)
+{
+    long long count = clang_getNumElements(type);
+    CXType element_type = clang_getArrayElementType(type);
+    fprintf(ffifile, "(array %lld ", count);
+    format_type_reference(element_type);
+    fprintf(ffifile, ")");
+}
+
 void format_type_reference(CXType type)
 {
     enum CXTypeKind kind = type.kind;
@@ -332,6 +340,7 @@ void format_type_reference(CXType type)
         format_typedef_reference(type);
         break;
     case CXType_ConstantArray:
+        format_array(type);
         break;
     default:
         fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_kind_name));
