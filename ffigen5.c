@@ -127,6 +127,7 @@ void process_enum_decl(CXCursor cursor, CXString ident)
 {
     int is_inside_enum = 1;
     printf("(enum (\"\" 0)\n");
+    /* TODO: anonymous enum should be named as linenum_filename as well */
     printf(" \"%s\" (", clang_getCString(ident));
     clang_visitChildren(cursor, visit_func, &is_inside_enum);
     printf("))\n");
@@ -255,11 +256,33 @@ void format_struct_reference(CXType type)
         clang_getSpellingLocation(location, &file, &line, NULL, NULL);
         filename = clang_getFileName(file);
         fprintf(ffifile, "(struct-ref \"%u_%s\")", line, clang_getCString(filename));
-        clang_disposeString(struct_name);
+        clang_disposeString(filename);
     } else {
         fprintf(ffifile, "(struct-ref \"%s\")", clang_getCString(struct_name));
     }
     clang_disposeString(struct_name);
+}
+
+void format_enum_reference(CXType type)
+{
+    CXCursor enum_def = clang_getTypeDeclaration(type);
+    CXSourceLocation location;
+    unsigned line;
+    CXFile file;
+    CXString filename;
+    CXString enum_name;
+
+    enum_name = clang_getCursorSpelling(enum_def);
+    if (strlen(clang_getCString(enum_name)) == 0) {
+        location = clang_getCursorLocation(enum_def);
+        clang_getSpellingLocation(location, &file, &line, NULL, NULL);
+        filename = clang_getFileName(file);
+        fprintf(ffifile, "(enum-ref \"%u_%s\")", line, clang_getCString(filename));
+        clang_disposeString(filename);
+    } else {
+        fprintf(ffifile, "(enum-ref \"%s\")", clang_getCString(enum_name));
+    }
+    clang_disposeString(enum_name);
 }
 
 void format_type_reference(CXType type)
@@ -285,6 +308,7 @@ void format_type_reference(CXType type)
         format_struct_reference(type);
         break;
     case CXType_Enum:
+        format_enum_reference(type);
         break;
     case CXType_Typedef:
         break;
