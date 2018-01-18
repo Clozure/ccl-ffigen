@@ -280,6 +280,14 @@ void format_enum_reference(CXType type)
     fprintf(ffifile, "\")");
 }
 
+void format_typedef_reference(CXType type)
+{
+    CXCursor typedef_def = clang_getTypeDeclaration(type);
+    fprintf(ffifile, "(typedef \"");
+    format_ident_name(typedef_def);
+    fprintf(ffifile, "\")");
+}
+
 void format_type_reference(CXType type)
 {
     enum CXTypeKind kind = type.kind;
@@ -306,6 +314,7 @@ void format_type_reference(CXType type)
         format_enum_reference(type);
         break;
     case CXType_Typedef:
+        format_typedef_reference(type);
         break;
     case CXType_FunctionProto:
         break;
