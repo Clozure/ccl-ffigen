@@ -12,6 +12,8 @@
 #define debug_print(...)
 #endif
 
+#define ffifile stdout
+
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data);
 
 char * get_macro_definition(CXCursor cursor, CXString filename)
@@ -36,8 +38,6 @@ char * get_macro_definition(CXCursor cursor, CXString filename)
     }
     return definition;
 }
-
-#define ffifile stdout
 
 /*
   Emit the macro name (possibly including a parenthesized arglist).
@@ -113,24 +113,50 @@ void process_macro_definition(CXCursor cursor, CXString filename, unsigned line)
     if (filename_s) {
         char * definition = get_macro_definition(cursor, filename);
         int is_predefined_header = (strcmp(filename_s, PREDEFINED_HEADER_PATH) == 0);
-        printf("(macro (\"%s\" %u) ",
-               is_predefined_header ? "" : filename_s,
-               is_predefined_header ? 1 : line
+        fprintf(ffifile, "(macro (\"%s\" %u) ",
+                is_predefined_header ? "" : filename_s,
+                is_predefined_header ? 1 : line
             );
         emit_macro_expansion(emit_macro_name(definition));
-        printf(")\n");
+        fprintf(ffifile, ")\n");
         free(definition);
     }
 }
 
-void process_enum_decl(CXCursor cursor, CXString ident)
+/* print ident name if it's not anonymous, otherwise print it as linenum_filename */
+void format_ident_name(CXCursor cursor)
+{
+    CXSourceLocation location;
+    unsigned line;
+    CXFile file;
+    CXString filename;
+    CXString name;
+
+    name = clang_getCursorSpelling(cursor);
+
+    /* It's strange that clang_Cursor_isAnonymous always return 0,
+       so check name instead */
+    if (strlen(clang_getCString(name)) == 0) {
+        location = clang_getCursorLocation(cursor);
+        clang_getSpellingLocation(location, &file, &line, NULL, NULL);
+        filename = clang_getFileName(file);
+        fprintf(ffifile, "%u_%s", line, clang_getCString(filename));
+        clang_disposeString(filename);
+    } else {
+        fprintf(ffifile, "%s", clang_getCString(name));
+    }
+    clang_disposeString(name);
+}
+
+void process_enum_decl(CXCursor cursor)
 {
     int is_inside_enum = 1;
-    printf("(enum (\"\" 0)\n");
-    /* TODO: anonymous enum should be named as linenum_filename as well */
-    printf(" \"%s\" (", clang_getCString(ident));
+    fprintf(ffifile, "(enum (\"\" 0)\n");
+    fprintf(ffifile, " \"");
+    format_ident_name(cursor);
+    fprintf(ffifile, "\" (");
     clang_visitChildren(cursor, visit_func, &is_inside_enum);
-    printf("))\n");
+    fprintf(ffifile, "))\n");
     is_inside_enum = 0;
     clang_visitChildren(cursor, visit_func, &is_inside_enum);
 }
@@ -140,18 +166,18 @@ void process_enum_constant_decl(CXCursor cursor, CXString ident, int is_inside_e
     const char * name = clang_getCString(ident);
     long long value = clang_getEnumConstantDeclValue(cursor);
     if (is_inside_enum) {
-        printf("(\"%s\" %lld)", name, value);
+        fprintf(ffifile, "(\"%s\" %lld)", name, value);
     } else {
-        printf("(enum-ident (\"\" 0)\n (\"%s\" %lld))\n", name, value);
+        fprintf(ffifile, "(enum-ident (\"\" 0)\n (\"%s\" %lld))\n", name, value);
     }
 }
 
 void format_storage_kind(CXCursor cursor)
 {
     if (clang_Cursor_getStorageClass(cursor) == CX_SC_Extern) {
-        fputs("(extern)", ffifile);
+        fprintf(ffifile, "(extern)");
     } else {
-        fputs("(static)", ffifile);
+        fprintf(ffifile, "(static)");
     }
 }
 
@@ -241,48 +267,17 @@ CXType getPointeeType(CXType type)
 void format_struct_reference(CXType type)
 {
     CXCursor struct_def = clang_getTypeDeclaration(type);
-    CXSourceLocation location;
-    unsigned line;
-    CXFile file;
-    CXString filename;
-    CXString struct_name;
-
-    struct_name = clang_getCursorSpelling(struct_def);
-
-    /* It's strange that clang_Cursor_isAnonymous always return 0,
-       so check struct_name instead */
-    if (strlen(clang_getCString(struct_name)) == 0) {
-        location = clang_getCursorLocation(struct_def);
-        clang_getSpellingLocation(location, &file, &line, NULL, NULL);
-        filename = clang_getFileName(file);
-        fprintf(ffifile, "(struct-ref \"%u_%s\")", line, clang_getCString(filename));
-        clang_disposeString(filename);
-    } else {
-        fprintf(ffifile, "(struct-ref \"%s\")", clang_getCString(struct_name));
-    }
-    clang_disposeString(struct_name);
+    fprintf(ffifile, "(struct-ref \"");
+    format_ident_name(struct_def);
+    fprintf(ffifile, "\")");
 }
 
 void format_enum_reference(CXType type)
 {
     CXCursor enum_def = clang_getTypeDeclaration(type);
-    CXSourceLocation location;
-    unsigned line;
-    CXFile file;
-    CXString filename;
-    CXString enum_name;
-
-    enum_name = clang_getCursorSpelling(enum_def);
-    if (strlen(clang_getCString(enum_name)) == 0) {
-        location = clang_getCursorLocation(enum_def);
-        clang_getSpellingLocation(location, &file, &line, NULL, NULL);
-        filename = clang_getFileName(file);
-        fprintf(ffifile, "(enum-ref \"%u_%s\")", line, clang_getCString(filename));
-        clang_disposeString(filename);
-    } else {
-        fprintf(ffifile, "(enum-ref \"%s\")", clang_getCString(enum_name));
-    }
-    clang_disposeString(enum_name);
+    fprintf(ffifile, "(enum-ref \"");
+    format_ident_name(enum_def);
+    fprintf(ffifile, "\")");
 }
 
 void format_type_reference(CXType type)
@@ -324,13 +319,13 @@ void format_type_reference(CXType type)
 
 void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident, CXType type)
 {
-    printf("(var (\"%s\" %u)\n", clang_getCString(filename), line);
-    printf("  \"%s\"\n", clang_getCString(ident));
-    printf("  ");
+    fprintf(ffifile, "(var (\"%s\" %u)\n", clang_getCString(filename), line);
+    fprintf(ffifile, "  \"%s\"\n", clang_getCString(ident));
+    fprintf(ffifile, "  ");
     format_type_reference(type);
-    printf(" ");
+    fprintf(ffifile, " ");
     format_storage_kind(cursor);
-    printf(")\n");
+    fprintf(ffifile, ")\n");
 }
 
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data)
@@ -351,7 +346,7 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
         process_macro_definition(cursor, filename, line);
         break;
     case CXCursor_EnumDecl:
-        process_enum_decl(cursor, ident);
+        process_enum_decl(cursor);
         break;
     case CXCursor_EnumConstantDecl:
         process_enum_constant_decl(cursor, ident, *(int *)client_data);
@@ -386,7 +381,7 @@ void process_predefined_macro_definitions(CXIndex index)
         CXTranslationUnit_DetailedPreprocessingRecord
         );
     if (unit == NULL) {
-        printf("Warning: Unable to get clang predefined header\n");
+        fprintf(stderr, "Warning: Unable to get clang predefined header\n");
         return;
     }
     CXCursor root = clang_getTranslationUnitCursor(unit);
@@ -407,7 +402,7 @@ int main(int argc, char *argv[])
         );
 
     if (unit == NULL) {
-        printf("Unable to parse translation unit. Quitting.\n");
+        fprintf(stderr, "Unable to parse translation unit. Quitting.\n");
         exit(-1);
     }
 
