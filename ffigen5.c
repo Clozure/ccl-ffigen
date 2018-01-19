@@ -359,6 +359,41 @@ void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXStrin
     fprintf(ffifile, ")\n");
 }
 
+void process_fields(CXCursor cursor)
+{
+    fprintf(ffifile, " (");
+    clang_visitChildren(cursor, visit_func, NULL);
+    fprintf(ffifile, ")");
+}
+
+void process_field_decl(CXCursor cursor, CXString ident, CXType type)
+{
+    fprintf(ffifile, "(\"%s\" ", clang_getCString(ident));
+    if (clang_Cursor_isBitField(cursor)) {
+        fprintf(ffifile, "(bitfield ");
+        format_type_reference(type);
+        fprintf(ffifile, " %lld %d))\n",
+                clang_Cursor_getOffsetOfField(cursor),
+                clang_getFieldDeclBitWidth(cursor));
+    } else {
+        fprintf(ffifile, "(field ");
+        format_type_reference(type);
+        fprintf(ffifile, " %lld %lld))\n",
+                clang_Cursor_getOffsetOfField(cursor) >> 3,
+                clang_Type_getSizeOf(type));
+    }
+}
+
+void process_struct_decl(CXCursor cursor)
+{
+    fprintf(ffifile, "(struct (\"\" 0)\n");
+    fprintf(ffifile, " \"");
+    format_ident_name(cursor);
+    fprintf(ffifile, "\"\n");
+    process_fields(cursor);
+    fprintf(ffifile, ")\n");
+}
+
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data)
 {
     CXSourceLocation location = clang_getCursorLocation(cursor);
@@ -383,8 +418,12 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
         process_enum_constant_decl(cursor, ident, *(int *)client_data);
         break;
     case CXCursor_StructDecl:
+        process_struct_decl(cursor);
         break;
     case CXCursor_UnionDecl:
+        break;
+    case CXCursor_FieldDecl:
+        process_field_decl(cursor, ident, type);
         break;
     case CXCursor_FunctionDecl:
         break;
