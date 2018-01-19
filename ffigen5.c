@@ -351,8 +351,8 @@ void format_type_reference(CXType type)
 void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident, CXType type)
 {
     fprintf(ffifile, "(var (\"%s\" %u)\n", clang_getCString(filename), line);
-    fprintf(ffifile, "  \"%s\"\n", clang_getCString(ident));
-    fprintf(ffifile, "  ");
+    fprintf(ffifile, " \"%s\"\n", clang_getCString(ident));
+    fprintf(ffifile, " ");
     format_type_reference(type);
     fprintf(ffifile, " ");
     format_storage_kind(cursor);
@@ -394,6 +394,25 @@ void process_struct_decl(CXCursor cursor)
     fprintf(ffifile, ")\n");
 }
 
+void process_union_decl(CXCursor cursor)
+{
+    fprintf(ffifile, "(union (\"\" 0)\n");
+    fprintf(ffifile, " \"");
+    format_ident_name(cursor);
+    fprintf(ffifile, "\"\n");
+    process_fields(cursor);
+    fprintf(ffifile, ")\n");
+}
+
+void process_typedef_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident)
+{
+    fprintf(ffifile, "(type (\"%s\" %u)\n", clang_getCString(filename), line);
+    fprintf(ffifile, " \"%s\"\n", clang_getCString(ident));
+    fprintf(ffifile, " ");
+    format_type_reference(clang_getTypedefDeclUnderlyingType(cursor));
+    fprintf(ffifile, ")\n");
+}
+
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data)
 {
     CXSourceLocation location = clang_getCursorLocation(cursor);
@@ -421,6 +440,7 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
         process_struct_decl(cursor);
         break;
     case CXCursor_UnionDecl:
+        process_union_decl(cursor);
         break;
     case CXCursor_FieldDecl:
         process_field_decl(cursor, ident, type);
@@ -431,6 +451,7 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
         process_var_decl(cursor, filename, line, ident, type);
         break;
     case CXCursor_TypedefDecl:
+        process_typedef_decl(cursor, filename, line, ident);
         break;
     default:
         break;
