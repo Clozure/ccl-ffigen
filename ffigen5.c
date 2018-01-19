@@ -172,10 +172,15 @@ void process_enum_constant_decl(CXCursor cursor, CXString ident, int is_inside_e
 
 void format_storage_kind(CXCursor cursor)
 {
-    if (clang_Cursor_getStorageClass(cursor) == CX_SC_Extern) {
+    enum CXLinkageKind linkage = clang_getCursorLinkage(cursor);
+    enum CX_StorageClass storage = clang_Cursor_getStorageClass(cursor);
+    if (clang_getCursorLinkage(cursor) == CXLinkage_External) {
         fprintf(ffifile, "(extern)");
-    } else {
+    } else if (storage == CX_SC_Static) {
         fprintf(ffifile, "(static)");
+    } else {
+        fprintf(stderr, "Error: Unimplemented CXLinkageKind %d, CX_StorageClass %d\n",
+                linkage, storage);
     }
 }
 
@@ -256,7 +261,7 @@ CXType getPointeeType(CXType type)
 {
     CXType pointee_type = clang_getPointeeType(type);
     if (pointee_type.kind == CXType_Unexposed) {
-        debug_print("Debug: libclang unexposed symbol.\n");
+        debug_print("Debug: libclang unexposed symbol. \n");
         pointee_type.kind = CXType_Void;
     }
     return pointee_type;
@@ -413,6 +418,46 @@ void process_typedef_decl(CXCursor cursor, CXString filename, unsigned line, CXS
     fprintf(ffifile, ")\n");
 }
 
+void process_function_params(CXType type)
+{
+    int num_args = clang_getNumArgTypes(type);
+    int i;
+
+    fprintf(ffifile, "  (");
+    for (i = 0; i < num_args; i++) {
+        format_type_reference(clang_getArgType(type, i));
+        if (i != num_args - 1) {
+            fprintf(ffifile, " ");
+        }
+    }
+    if (clang_isFunctionTypeVariadic(type)) {
+        if (clang_getNumArgTypes(type) > 0) {
+            fprintf(ffifile, " ");
+        }
+        fprintf(ffifile, "(void ())");
+    }
+    fprintf(ffifile, ")\n");
+}
+
+void format_function_return(CXType type)
+{
+    CXType return_type = clang_getResultType(type);
+    format_type_reference(return_type);
+}
+
+void process_function_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident, CXType type)
+{
+    fprintf(ffifile, "(function (\"%s\" %u)\n", clang_getCString(filename), line);
+    fprintf(ffifile, " \"%s\"\n", clang_getCString(ident));
+    fprintf(ffifile, " (function\n");
+    process_function_params(type);
+    fprintf(ffifile, "  ");
+    format_function_return(type);
+    fprintf(ffifile, ") ");
+    format_storage_kind(cursor);
+    fprintf(ffifile, ")\n");
+}
+
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data)
 {
     CXSourceLocation location = clang_getCursorLocation(cursor);
@@ -446,6 +491,7 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
         process_field_decl(cursor, ident, type);
         break;
     case CXCursor_FunctionDecl:
+        process_function_decl(cursor, filename, line, ident, type);
         break;
     case CXCursor_VarDecl:
         process_var_decl(cursor, filename, line, ident, type);
