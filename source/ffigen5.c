@@ -12,7 +12,7 @@
 #define debug_print(...)
 #endif
 
-#define ffifile stdout
+FILE * ffifile;
 
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data);
 
@@ -527,12 +527,29 @@ void process_predefined_macro_definitions(CXIndex index)
     clang_disposeTranslationUnit(unit);
 }
 
+int set_output_file(int argc, char * argv[])
+{
+    int i;
+    for(i = 0; i < argc - 1; i++) {
+        if (strcmp(argv[i], "-o") == 0) {
+            ffifile = fopen(argv[i+1], "w");
+            if (ffifile == NULL) {
+                fprintf(stderr, "Error: unable to write to file %s\n", argv[i+1]);
+                return -1;
+            }
+            return 0;
+        }
+    }
+    ffifile = stdout;
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     CXIndex index = clang_createIndex(0, 0);
     CXTranslationUnit unit = clang_parseTranslationUnit(
-        index,
-        "test.h", NULL, 0,
+        index, NULL,
+        (const char * const *)argv, argc,
         NULL, 0,
         CXTranslationUnit_DetailedPreprocessingRecord |
         CXTranslationUnit_SkipFunctionBodies
@@ -540,7 +557,13 @@ int main(int argc, char *argv[])
 
     if (unit == NULL) {
         fprintf(stderr, "Unable to parse translation unit. Quitting.\n");
+        clang_disposeIndex(index);
         exit(-1);
+    }
+
+    if (set_output_file(argc,argv) < 0) {
+        clang_disposeIndex(index);
+        clang_disposeTranslationUnit(unit);
     }
 
     process_predefined_macro_definitions(index);
