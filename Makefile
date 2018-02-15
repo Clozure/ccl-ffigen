@@ -1,4 +1,4 @@
 CC = clang
 
 all:
-	$(CC) -lclang ffigen5.c -o ffigen
+	$(CC) -lclang source/ffigen5.c -o ffigen/ffigen
