@@ -3,6 +3,8 @@ Behavior Changes Compare to ffigen4
 
 1. Builtin macro definition changes from gcc's to clang's.
 
-2. Ignore all `#undef` since libclang doesn't give me access to it and luckily `parse-ffi.lisp` doesn't make use of `undef-macro`.
+2. Builtin macro definition is in `""` file instead of line 1 of given header file.
 
-3. Function pointer type is not exposed by libclang, have to use `void *` instead.
+3. Ignore all `#undef` since libclang doesn't give me access to it and luckily `parse-ffi.lisp` doesn't make use of `undef-macro`.
+
+4. Function pointer type is not exposed by libclang, have to use `void *` instead.
