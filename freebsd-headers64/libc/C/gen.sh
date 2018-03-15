@@ -1,4 +1,4 @@
-#|/bin/sh
+#!/bin/sh
 
 rm -rf usr
 
@@ -94,4 +94,5 @@ gen-ffi.sh /usr/include/machine/ucontext.h
 gen-ffi.sh /usr/include/ucontext.h
 gen-ffi.sh /usr/include/ifaddrs.h
 gen-ffi.sh /usr/include/sys/elf.h
+gen-ffi.sh /usr/include/sys/link_elf.h
 
