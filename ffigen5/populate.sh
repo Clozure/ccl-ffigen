@@ -1,4 +1,7 @@
 #!/bin/sh
+
+# SPDX-License-Identifier: Apache-2.0
+
 rm -rf Applications
 SDK=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk
 # CFLAGS="-m64 -isysroot ${SDK} -ObjC"; export CFLAGS

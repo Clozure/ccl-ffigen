@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 
 CC = /usr/local/opt/llvm/bin/clang
 LIBDIR = /usr/local/opt/llvm/lib

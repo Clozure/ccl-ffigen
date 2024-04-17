@@ -1,4 +1,7 @@
 #!/bin/sh
+
+# SPDX-License-Identifier: Apache-2.0
+
 FFIGEN_DIR=/Users/Walrus/ffigen5/ffigen
 # CFLAGS="-isystem ${FFIGEN_DIR}/include -quiet -fffigen ${CFLAGS}"
 CFLAGS=" ${CFLAGS}"
