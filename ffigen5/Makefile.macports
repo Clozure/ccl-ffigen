@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+
+CC = /opt/local/bin/clang
+LIBDIR = /opt/local/libexec/llvm-17/lib
+INCDIR = /opt/local/libexec/llvm-17/include
+
+all:
+	$(CC) -g -L $(LIBDIR) -lclang -I $(INCDIR) -rpath $(LIBDIR) ffigen5.c -o ffigen5
+
