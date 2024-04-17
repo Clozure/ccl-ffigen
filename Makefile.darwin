@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Try to use the libclang that comes with Xcode.
+#
+# This is almost certainly an ill-advised thing to do, but
+# it does avoid having to install llvm from homebrew (or from
+# source).
+#
+# The really ugly part is that you have to obtain a copy of
+# the libclang header files from somewhere. Becaue libclang
+# is supposed to provide a stable interface, I'm hoping that
+# we'll usually get away with this.
+#
+## Deciding which headers to copy
+#
+# Look at the output of clang --version; it will print something
+# like "Apple clang version 15.0.0 (clang-1500.3.9.4)"
+# 
+# This looks like it might matche the tag llvmorg-15.0.0 in the
+# https://github.com/llvm/llvm-project repository.
+#
+# So, it makes sense to try grabbing the libclang include files from
+# https://github.com/llvm/llvm-project/tree/llvmorg-15.0.0/clang/include/clang-c
+#
+# Copy all those headers into ./include/clang-c and then hope
+# for the best.
+#
+# If this doesn't work, bite the bullet and install llvm from
+# homebrew or by hand.
+
+# The library directory that contains the Xcode-bundled libclang
+D=$(shell xcode-select --print-path)
+EXTRA_LIBDIR="$(D)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+
+INCDIR=include
+
+all:
+	$(CC) -rpath $(EXTRA_LIBDIR) -L $(EXTRA_LIBDIR) \
+		 -I $(INCDIR) -lclang source/ffigen5.c -o ffigen5
+
+clean:
+	rm -f ffigen5
