@@ -34,9 +34,12 @@ EXTRA_LIBDIR="$(D)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
 
 INCDIR=include
 
-all:
-	$(CC) -rpath $(EXTRA_LIBDIR) -L $(EXTRA_LIBDIR) \
-		 -I $(INCDIR) -lclang source/ffigen5.c -o ffigen5
+CFLAGS=-Iinclude
+LDFLAGS=-rpath $(EXTRA_LIBDIR) -L $(EXTRA_LIBDIR)
+OBJS=ffigen5.o
+
+all:	$(OBJS)
+	$(CC) $(LDFLAGS) -lclang $(OBJS) -o ffigen5
 
 clean:
-	rm -f ffigen5
+	rm -f ffigen5 *.o

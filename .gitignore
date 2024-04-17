@@ -1,0 +1,4 @@
+*.o
+ffigen5/ffigen5
+ffigen5/include
+
