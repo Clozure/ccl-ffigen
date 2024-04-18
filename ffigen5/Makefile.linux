@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ffigen5 is dependent on libclang which is part of clang. Its header files, however,
+# are not installed by default. To ensure they are installed, use your distribution's
+# package manager to install the libclang-dev package. For example, on Debian-based
+# distributions
+#
+#   sudo apt install clang libclang-dev
+
+VERSION = $(shell clang --version | head -n 1 | grep -o -E '[[:digit:]]*' | head -n 1)
+
+CC = /usr/bin/clang
+LIBDIR = /usr/lib/llvm-$(VERSION)/lib
+INCDIR = /usr/lib/llvm-$(VERSION)/include
+
+all:
+	$(CC) -g -L $(LIBDIR) -lclang -I $(INCDIR) ffigen5.c -o ffigen5
+
