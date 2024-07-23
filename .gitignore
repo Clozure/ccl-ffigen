@@ -1,4 +1,6 @@
 *.o
+*.ffi
+*.cdb
 ffigen5/ffigen5
 ffigen5/include
 
