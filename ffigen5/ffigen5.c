@@ -973,6 +973,9 @@ visit_struct_preflight(CXCursor cursor, CXCursor parent, CXClientData context)
     enum CXCursorKind kind = clang_getCursorKind(cursor);
 
     if (kind == CXCursor_UnionDecl) {
+        CXCursor c = cursor;
+        clang_visitChildren(c, visit_struct_preflight, NULL);
+
 	fprintf(ffifile, "(union (\"\" 0)\n");
 	fprintf(ffifile, " \"");
 	format_ident_name(cursor);
@@ -980,6 +983,9 @@ visit_struct_preflight(CXCursor cursor, CXCursor parent, CXClientData context)
 	process_fields(cursor);
 	fprintf(ffifile, ")\n");
     } else if (kind == CXCursor_StructDecl) {
+        CXCursor c = cursor;
+        clang_visitChildren(c, visit_struct_preflight, NULL);
+
 	fprintf(ffifile, "(struct (\"\" 0)\n");
 	fprintf(ffifile, " \"");
 	format_ident_name(cursor);
