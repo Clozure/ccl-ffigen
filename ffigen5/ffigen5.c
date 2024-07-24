@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
 #include <ctype.h>
+#include <limits.h>
 #include <clang-c/Index.h>
 
 #define FFIGEN_DEBUG
@@ -129,7 +131,10 @@ void process_macro_definition(CXCursor cursor, CXString filename, unsigned line)
     }
 }
 
-/* print ident name if it's not anonymous, otherwise print it as linenum_filename */
+/*
+ * Print ident name if it's not anonymous, otherwise print it as
+ * linenum_filename
+ */
 void format_ident_name(CXCursor cursor)
 {
     CXSourceLocation location;
@@ -143,8 +148,16 @@ void format_ident_name(CXCursor cursor)
     if (strlen(clang_getCString(name)) == 0) {
         location = clang_getCursorLocation(cursor);
         clang_getSpellingLocation(location, &file, &line, NULL, NULL);
-        filename = clang_getFileName(file);
-        fprintf(ffifile, "%u_%s", line, clang_getCString(filename));
+        filename = clang_File_tryGetRealPathName(file);
+        const char *path = clang_getCString(filename);
+        if (strcmp(path, "") == 0) {
+            clang_disposeString(filename);
+            filename = clang_getFileName(file);
+            path = clang_getCString(filename);
+        }
+        char *mutable_path = strdup(path);
+        fprintf(ffifile, "%u_%s", line, basename(mutable_path));
+        free(mutable_path);
         clang_disposeString(filename);
     } else {
         fprintf(ffifile, "%s", clang_getCString(name));
