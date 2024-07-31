@@ -3,8 +3,6 @@
 # Note that it's fine to use a 64-bit version of ffigen5 to
 # process header files for 32-bit binaries. (Pass the -m32 flag.)
 
-CFLAGS = -g
-
 #CC = /usr/local/opt/llvm/bin/clang
 #LIBDIR = /usr/local/opt/llvm/lib
 #INCDIR = /usr/local/opt/llvm/include
