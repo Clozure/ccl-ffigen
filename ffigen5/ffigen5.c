@@ -1,4 +1,4 @@
-/* -*- c-basic-offset: 4; -*- */
+/* -*- c-basic-offset: 4; indent-tabs-mode:nil; -*- */
 
 /* SPDX-License-Identifier: Apache-2.0 */
 
@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <clang-c/Index.h>
+#include <assert.h>
 
 #define FFIGEN_DEBUG
 
@@ -21,10 +22,15 @@
 FILE * ffifile;
 
 enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientData client_data);
-enum CXChildVisitResult visit_fields(CXCursor cursor, CXCursor parent, CXClientData client_data);
+enum CXChildVisitResult visit_field(CXCursor cursor, CXCursor parent, CXClientData client_data);
 enum CXChildVisitResult visit_struct_preflight(CXCursor cursor, CXCursor parent, CXClientData client_data);
 
-char * get_macro_definition(CXCursor cursor, CXString filename)
+/*
+ * To get the macro definition, we read it from the source file.
+ * It seems like there really ought to be a better way.
+ */
+char *
+get_macro_definition(CXCursor cursor, CXString filename)
 {
     const char * filename_s = clang_getCString(filename);
     char * definition = NULL;
@@ -35,13 +41,26 @@ char * get_macro_definition(CXCursor cursor, CXString filename)
         clang_getSpellingLocation(clang_getRangeEnd(range), NULL, NULL, NULL, &end);
         length = end - start;
         definition = malloc(length+1);
-        FILE * header = fopen(filename_s, "r");
-        if (header) {
-            fseek(header, start, SEEK_SET);
-            for(int i = 0; i < length; i++) {
-                definition[i] = fgetc(header);
+        FILE *f = fopen(filename_s, "r");
+        if (f) {
+            int err;
+
+            err = fseek(f, start, SEEK_SET);
+            if (err == -1) {
+                perror("fseek");
+                exit(1);
             }
-            definition[length] = '\0';
+            int count;
+            count = fread(definition, length, 1, f);
+            if (count != 1) {
+                fprintf(stderr, "fread lost\n");
+                exit(1);
+            }
+            fclose(f);
+            definition[length] = 0;
+        } else {
+            perror("fopen");
+            exit(1);
         }
     }
     return definition;
@@ -353,6 +372,20 @@ void format_incomplete_array(CXType type)
     fprintf(ffifile, ")");
 }
 
+/*
+ * The type represents an array with a specified size that is not
+ * an integer-constant-expression, e.g., int s[x + foo()]
+ *
+ * We treat this the same as an incompete array.
+ */
+void format_variable_array(CXType type)
+{
+    CXType element_type = clang_getArrayElementType(type);
+    fprintf(ffifile, "(array 0 ");
+    format_type_reference(element_type);
+    fprintf(ffifile, ")");
+}
+
 void format_ext_vector(CXType type)
 {
     long long count = clang_getNumElements(type);
@@ -361,6 +394,7 @@ void format_ext_vector(CXType type)
     format_type_reference(element_type);
     fprintf(ffifile, ")");
 }
+
 
 /*
  * This is a crock to deal with function prototypes with null-length
@@ -375,10 +409,20 @@ void format_ext_vector(CXType type)
  * The Lisp code in CCL somehow doesn't handle the (array 0 ...)  case
  * correctly, so we work around that here by notating it as a pointer
  * instead.
+ *
+ * Additionally, there is this odd (to my eyes, anyway) declaration in
+ * stdio.h on an Ubuntu Linux system:
+ *:
+ *   extern char *tmpnam (char[L_tmpnam]) __THROW __wur;
+ *
+ * We want this the parameter to be (pointer (char ()))
+ *
  */
 void format_arg_type(CXType type)
 {
-    if (type.kind == CXType_IncompleteArray) {
+    if (type.kind == CXType_ConstantArray ||
+        type.kind == CXType_IncompleteArray ||
+        type.kind == CXType_VariableArray) {
 	CXType element_type = clang_getArrayElementType(type);
 	fprintf(ffifile, "(pointer ");
 	format_type_reference(element_type);
@@ -387,7 +431,7 @@ void format_arg_type(CXType type)
 	format_type_reference(type);
     }
 }
-						
+
 void format_function_proto(CXType type)
 {
     CXType result_type = clang_getResultType(type);
@@ -539,6 +583,9 @@ void format_type_reference(CXType type)
     case CXType_FunctionNoProto:
 	format_function_no_proto(type);
 	break;
+    case CXType_VariableArray:
+	format_variable_array(type);
+	break;
     default:
         fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_kind_name));
     }
@@ -559,31 +606,34 @@ void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXStrin
 void process_fields(CXCursor cursor)
 {
     fprintf(ffifile, " (");
-    clang_visitChildren(cursor, visit_fields, NULL);
+    clang_visitChildren(cursor, visit_field, NULL);
     fprintf(ffifile, ")");
 }
 
-void process_field_decl(CXCursor cursor, CXString ident, CXType type)
+void process_field_decl(CXCursor cursor, CXString ident, CXType type,
+                        long long bias)
 {
     fprintf(ffifile, "(\"%s\" ", clang_getCString(ident));
     if (clang_Cursor_isBitField(cursor)) {
         fprintf(ffifile, "(bitfield ");
         format_type_reference(type);
         fprintf(ffifile, " %lld %d))\n",
-                clang_Cursor_getOffsetOfField(cursor),
+                clang_Cursor_getOffsetOfField(cursor) + bias,
                 clang_getFieldDeclBitWidth(cursor));
     } else {
         fprintf(ffifile, "(field ");
 	// TODO: treat CXType_IncompleteArray as pointer here
 	if (type.kind == CXType_IncompleteArray) {
 	    format_incomplete_array(type);
+            long long offset_nbits = clang_Cursor_getOffsetOfField(cursor);
 	    fprintf(ffifile, " %lld 0))\n", // ffigen4 gives these width 0
-		    clang_Cursor_getOffsetOfField(cursor) >> 3);
+		    bias + (offset_nbits >> 3));
 	} else {
-        format_type_reference(type);
-        fprintf(ffifile, " %lld %lld))\n",
-                clang_Cursor_getOffsetOfField(cursor) >> 3,
-                clang_Type_getSizeOf(type)); // -2 is error code for  CXTypeLayoutError_Incomplete
+            format_type_reference(type);
+            long long offset_nbits = clang_Cursor_getOffsetOfField(cursor);
+            fprintf(ffifile, " %lld %lld))\n",
+                    bias + (offset_nbits >> 3),
+                    clang_Type_getSizeOf(type)); // -2 is error code for  CXTypeLayoutError_Incomplete
 	}
     }
 }
@@ -796,7 +846,7 @@ enum CXChildVisitResult objc_interface_method_func(CXCursor cursor, CXCursor par
 	fprintf(ffifile, "(objc-instance-method ");
 	format_objc_method(cursor, parent);
     }
-    return CXChildVisit_Continue;	
+    return CXChildVisit_Continue;
 }
 
 void process_objc_interface_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident)
@@ -899,7 +949,7 @@ enum CXChildVisitResult objc_category_method_func(CXCursor cursor, CXCursor pare
 	fprintf(ffifile, "(objc-instance-method ");
 	format_objc_category_method(cursor, parent);
     }
-    return CXChildVisit_Continue;	
+    return CXChildVisit_Continue;
 }
 
 void process_objc_category_decl(CXCursor cursor)
@@ -937,7 +987,7 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
         process_union_decl(cursor);
         break;
     case CXCursor_FieldDecl:
-        process_field_decl(cursor, ident, type);
+        process_field_decl(cursor, ident, type, 0);
         break;
     case CXCursor_FunctionDecl:
         process_function_decl(cursor, filename, line, ident, type);
@@ -966,17 +1016,125 @@ enum CXChildVisitResult visit_func(CXCursor cursor, CXCursor parent, CXClientDat
     return CXChildVisit_Continue;
 }
 
+/*
+ * Used as the context when visiting the children of an anonymous
+ * record.
+ *
+ * We are interested in determining the offset of the anonymous record
+ * relative to the enclosing named record.
+ */
+struct record_field_context {
+    /* a cursor for the nearest enclosing named record */
+    CXCursor record_cursor;
+    /* the offset of the first field in the anonymous record */
+    long long offset;
+};
+
 enum CXChildVisitResult
-visit_fields(CXCursor cursor, CXCursor parent, CXClientData client_data)
+visit_first_record_field(CXCursor cursor, CXCursor parent,
+                         CXClientData context)
+{
+    struct record_field_context *ctx = context;
+
+    CXString name = clang_getCursorSpelling(cursor);
+    const char *cname = clang_getCString(name);
+    if (strcmp(cname, "") == 0) {
+        return CXChildVisit_Recurse;
+    }
+    CXType type = clang_getCursorType(ctx->record_cursor);
+    long long offset = clang_Type_getOffsetOf(type, clang_getCString(name));
+    if (offset != -1) {
+        ctx->offset = offset >> 3;
+        return CXChildVisit_Break;
+    } else {
+        return CXChildVisit_Continue;
+    }
+}
+
+enum CXChildVisitResult
+visit_field(CXCursor cursor, CXCursor parent, CXClientData client_data)
 {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
-    
-    if (kind == CXCursor_FieldDecl) {
-	CXString name = clang_getCursorSpelling(cursor);
-	CXType type = clang_getCursorType(cursor);
+    CXString name = clang_getCursorSpelling(cursor);
+    CXString kind_string = clang_getCursorKindSpelling(kind);
+    CXType type = clang_getCursorType(cursor);
 
-	process_field_decl(cursor, name, type);
+    if (kind == CXCursor_FieldDecl) {
+        long long bias = 0;
+
+        if (client_data) {
+            /*
+             * In this case, we're a field in some anonymous record.
+             * The offset to the start of the anonymous record
+             * relative to the containing named record is found in the
+             * client_data.
+             */
+            struct record_field_context *ctx = client_data;
+            bias = ctx-> offset;
+            assert(bias >= 0);
+        }
+	process_field_decl(cursor, name, type, bias);
+    } else if (clang_Cursor_isAnonymousRecordDecl(cursor)) {
+        /*
+         * We are apparently looking at a field that is an anonymous
+         * struct or union.
+         *
+         * We'll treat the fields of the anonymous record as if they
+         * are fields in the containing named record.
+         *
+         * We can compute the size of the anonymous record with with
+         * clang_Type_getSizeOf(), but it's less clear how to get the
+         * offset of the fields of the anonymous record relative to
+         * its ultimate named parent.
+         *
+         * We can't use clang_Cursor_getOffsetOfField() because we're
+         * not looking at a field declaration.  Because the anonymous
+         * record we're looking at has no name, neither can we use
+         * clang_Type_getOffsetOf().
+         *
+         * All I can think of to do is to look at first field of the
+         * anonymous union, and see what its offset is with respect to
+         * the passed-in parent cursor.
+         *.
+         */
+        if (client_data == NULL) {
+            /*
+             * This is the first time we've seen an anonymous record
+             * while working on this field.  We therefore conclude that the
+             * parent cursor we were passed refers to a named record.
+             *
+             * Establish a context struct wherein we save that parent
+             * cursor so that we can ask for offsets relative to it.
+             *
+             * Visit the first field of the anonymous record that we're
+             * currently working on in order to compute what its offset
+             * is relative to the named parent.
+             */
+            CXCursor c = cursor;
+            struct record_field_context ctx = {parent, -1};
+            clang_visitChildren(c, visit_first_record_field, &ctx);
+            /*
+             * With that context established, we can visit the fields
+             * of the anonymous record, and write out their offsets and
+             * sizes.
+             */
+            clang_visitChildren(cursor, visit_field, &ctx);
+        } else {
+            /*
+             * Keep using the existing record_field_context.
+             */
+            clang_visitChildren(cursor, visit_field, client_data);
+        }
+    } else if (kind == CXCursor_UnionDecl || kind == CXCursor_StructDecl ||
+               kind == CXCursor_EnumDecl) {
+        /* don't do anything; we emitted these types during preflight */
+    } else {
+        /* We may be confused */
+        fprintf(stderr, "warning: unexpected kind %s, visiting field \"%s\"\n",
+                clang_getCString(kind_string), clang_getCString(name));
     }
+    clang_disposeString(name);
+    clang_disposeString(kind_string);
     return CXChildVisit_Continue;
 }
 
@@ -984,6 +1142,13 @@ enum CXChildVisitResult
 visit_struct_preflight(CXCursor cursor, CXCursor parent, CXClientData context)
 {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
+
+    /*
+     * No need to generate a definition for an anonymous struct/union.
+     */
+    if (clang_Cursor_isAnonymousRecordDecl(cursor)) {
+        return CXChildVisit_Continue;
+    }
 
     if (kind == CXCursor_UnionDecl) {
         CXCursor c = cursor;
