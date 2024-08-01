@@ -1039,15 +1039,17 @@ visit_first_record_field(CXCursor cursor, CXCursor parent,
     CXString name = clang_getCursorSpelling(cursor);
     const char *cname = clang_getCString(name);
     if (strcmp(cname, "") == 0) {
-        return CXChildVisit_Recurse;
-    }
-    CXType type = clang_getCursorType(ctx->record_cursor);
-    long long offset = clang_Type_getOffsetOf(type, clang_getCString(name));
-    if (offset != -1) {
-        ctx->offset = offset >> 3;
-        return CXChildVisit_Break;
+        CXCursor c = cursor;
+        clang_visitChildren(c, visit_first_record_field, context);
     } else {
-        return CXChildVisit_Continue;
+        CXType type = clang_getCursorType(ctx->record_cursor);
+        long long offset = clang_Type_getOffsetOf(type, cname);
+        if (offset != -1) {
+            ctx->offset = offset >> 3;
+            return CXChildVisit_Break;
+        } else {
+            return CXChildVisit_Continue;
+        }
     }
 }
 
@@ -1142,13 +1144,6 @@ enum CXChildVisitResult
 visit_struct_preflight(CXCursor cursor, CXCursor parent, CXClientData context)
 {
     enum CXCursorKind kind = clang_getCursorKind(cursor);
-
-    /*
-     * No need to generate a definition for an anonymous struct/union.
-     */
-    if (clang_Cursor_isAnonymousRecordDecl(cursor)) {
-        return CXChildVisit_Continue;
-    }
 
     if (kind == CXCursor_UnionDecl) {
         CXCursor c = cursor;
