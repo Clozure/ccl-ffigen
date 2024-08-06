@@ -1041,6 +1041,7 @@ visit_first_record_field(CXCursor cursor, CXCursor parent,
     if (strcmp(cname, "") == 0) {
         CXCursor c = cursor;
         clang_visitChildren(c, visit_first_record_field, context);
+        return CXChildVisit_Continue;
     } else {
         CXType type = clang_getCursorType(ctx->record_cursor);
         long long offset = clang_Type_getOffsetOf(type, cname);
@@ -1130,10 +1131,23 @@ visit_field(CXCursor cursor, CXCursor parent, CXClientData client_data)
     } else if (kind == CXCursor_UnionDecl || kind == CXCursor_StructDecl ||
                kind == CXCursor_EnumDecl) {
         /* don't do anything; we emitted these types during preflight */
+    } else if (kind == CXCursor_AlignedAttr) {
+        /* we don't do anything about this attribute */
     } else {
         /* We may be confused */
-        fprintf(stderr, "warning: unexpected kind %s, visiting field \"%s\"\n",
+        CXSourceLocation location = clang_getCursorLocation(cursor);
+        CXFile file;
+        CXString filename;
+        unsigned line;
+
+        clang_getSpellingLocation(location, &file, &line, 0, 0);
+        filename = clang_getFileName(file);
+        
+        fprintf(stderr, "warning: %s:%d: unexpected kind %s, visiting field \"%s\"\n",
+                clang_getCString(filename),
+                line,
                 clang_getCString(kind_string), clang_getCString(name));
+        clang_disposeString(filename);
     }
     clang_disposeString(name);
     clang_disposeString(kind_string);
