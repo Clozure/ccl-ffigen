@@ -40,6 +40,13 @@ EXTRA_FLAGS=
 #LIBDIR = /usr/local/llvm15/lib
 #INCDIR = /usr/local/llvm15/include
 
+## 64-bit Windows using MSYS2 with MINGW64
+# Get libclang with:
+# pacman -S mingw64/mingw-w64-x86_64-clang-15
+#CC = /mingw64/opt/llvm-15/bin/clang
+#LIBDIR = /mingw64/opt/llvm-15/lib
+#INCDIR = /mingw64/opt/llvm-15/include
+
 CFLAGS = -I$(INCDIR) -g
 OBJS = ffigen5.o
 
