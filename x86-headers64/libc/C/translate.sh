@@ -2,8 +2,7 @@
 
 # For x86-64 Linux
 
-#set -e
-
+set -e
 rm -rf ./usr
 
 # If FFIGEN as defined in the environment, use that as the
@@ -14,19 +13,20 @@ if [ -z "${FFIGEN}" ]; then
     FFIGEN=ffigen5
 fi
 
+# I think I would like to define _GNU_SOURCE, but that exposes
+# definitions that use "__attribute__ ((__transparent_union__))",
+# and libclang doesn't appear to support that (it reports
+# CXCursor_UnexposedAttr).
+#
+# The old gcc-4.0.0 ffigen (and the Lisp parse-ffi code), on the
+# other hand, did support the transparent union definitions.
+
+platform_flags="-D_DEFAULT_SOURCE -D_XOPEN_SOURCE=600 -m64"
+
 translate()
 {
     includes=""
     other_flags=""
-
-    # I think I would like to define _GNU_SOURCE, but that exposes
-    # definitions that use "__attribute__ ((__transparent_union__))",
-    # and libclang doesn't appear to support that (it reports
-    # CXCursor_UnexposedAttr).
-    #
-    # The old gcc-4.0.0 ffigen (and the Lisp parse-ffi code), on the
-    # other hand, did support the transparent union definitions.
-    platform_flags="-D_DEFAULT_SOURCE -D_XOPEN_SOURCE=600 -m64"
 
     while [ $# -gt 1 ]; do
         case "$1" in
@@ -148,3 +148,6 @@ translate /usr/include/elf.h
 # for leaks.lisp
 translate /usr/include/mcheck.h
 translate /usr/include/malloc.h
+
+# for pty.lisp
+translate /usr/include/pty.h
