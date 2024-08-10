@@ -1,9 +1,8 @@
 #!/bin/sh
 
-# For FreeBSD 32-bit x86
+# For x86-64 FreeBSD
 
 set -e
-
 rm -rf ./usr
 
 # If FFIGEN as defined in the environment, use that as the
@@ -14,14 +13,35 @@ if [ -z "${FFIGEN}" ]; then
     FFIGEN=ffigen5
 fi
 
+platform_flags="-m64"
+
 translate()
 {
+    includes=""
+    other_flags=""
+
+    while [ $# -gt 1 ]; do
+        case "$1" in
+            -include)
+                includes="$includes -include $2"
+                shift; shift
+                ;;
+            -*)
+                other_flags="$other_flags $1"
+                shift
+                ;;
+            *)
+                ;;
+        esac
+    done
     output_dir=".`dirname $1`"
     mkdir -p "$output_dir"
     output_file="`basename $1 .h`.ffi"
     output_path="$output_dir/$output_file"
-    echo $1
-    "$FFIGEN" -m32 -x c -I/usr/include -include /usr/include/sys/types.h "$1" -o "$output_path"
+    echo $1 $other_flags $includes
+    "$FFIGEN" $platform_flags $other_flags \
+              -x c -isystem /usr/include $includes "$1" \
+              -o "$output_path"
 }
 
 # list of posix headers
@@ -110,9 +130,9 @@ translate /usr/include/wordexp.h
 
 # additional headers needed to compile ccl
 translate /usr/include/sysexits.h
-translate /usr/include/sys/sysctl.h
-translate /usr/include/machine/fpu.h
-translate /usr/include/machine/ucontext.h
+translate -include /usr/include/sys/types.h /usr/include/sys/sysctl.h
+translate -include /usr/include/sys/types.h /usr/include/machine/fpu.h
+translate -include /usr/include/sys/types.h /usr/include/machine/ucontext.h
 translate /usr/include/ucontext.h
 translate /usr/include/ifaddrs.h
 translate /usr/include/sys/elf.h
