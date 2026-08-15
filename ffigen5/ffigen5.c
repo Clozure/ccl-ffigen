@@ -279,7 +279,9 @@ void format_c_primitive_type(CXType type, enum CXTypeKind kind)
         [CXType_Int128] = "long-long-long",
         [CXType_Float] = "float",
         [CXType_Double] = "double",
-        [CXType_LongDouble] = "long-double"
+        [CXType_LongDouble] = "long-double",
+        [CXType_Half] = "float",
+        [CXType_Float16] = "float"
         /* TODO: Machine specific types
          * CXType_Float128: '__float128' in i386, x86_64, IA-64
          * CXType_Half: 'half' in OpenCL, '__fp16' in ARM NEON.
