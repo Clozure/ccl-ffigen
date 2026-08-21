@@ -1,0 +1,7 @@
+;; ffigen doesn't provide actual values for FLT_MAX, etc. as they are defined
+;; in terms of compiler builtin constants
+
+(macro ("./float.h" 4) "FLT_MAX" "3.4028235E+38F")
+(macro ("./float.h" 5) "FLT_MIN" "1.1754945E-38F")
+(macro ("./float.h" 6) "DBL_MAX" "1.7976931348623157E+308")
+(macro ("./float.h" 7) "DBL_MIN" "2.2250738585072014E-308")
