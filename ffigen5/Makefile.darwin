@@ -29,8 +29,7 @@
 # homebrew or by hand.
 
 # The library directory that contains the Xcode-bundled libclang
-D=$(shell xcode-select --print-path)
-EXTRA_LIBDIR="$(D)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+EXTRA_LIBDIR="`xcrun --show-toolchain-path`/usr/lib"
 
 INCDIR=include
 

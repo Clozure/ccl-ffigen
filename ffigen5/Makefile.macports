@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
+VERSION = $(shell clang --version | head -n 1 | grep -o -E '[[:digit:]]*' | head -n 1)
+
 CC = /opt/local/bin/clang
-LIBDIR = /opt/local/libexec/llvm-17/lib
-INCDIR = /opt/local/libexec/llvm-17/include
+LIBDIR = /opt/local/libexec/llvm-${VERSION}/lib
+INCDIR = /opt/local/libexec/llvm-${VERSION}/include
 
 all:
 	$(CC) -g -L $(LIBDIR) -lclang -I $(INCDIR) -rpath $(LIBDIR) ffigen5.c -o ffigen5
