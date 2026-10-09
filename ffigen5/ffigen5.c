@@ -280,21 +280,48 @@ void format_c_primitive_type(CXType type, enum CXTypeKind kind)
         [CXType_Float] = "float",
         [CXType_Double] = "double",
         [CXType_LongDouble] = "long-double",
-        [CXType_Half] = "float",
-        [CXType_Float16] = "float"
+        /*
+         * The 16-bit float types get their own names, which parse-ffi
+         * has to know about. They are not "float": they are 2 bytes,
+         * not 4, and the value is passed in the low half of an FP
+         * register.
+         *
+         * CXType_Half: '__fp16' in ARM, 'half' in OpenCL.
+         * CXType_Float16: '_Float16' (IEEE binary16).
+         * CXType_BFloat16: '__bf16' (bfloat16).
+         */
+        [CXType_Half] = "half-float",
+        [CXType_Float16] = "float16",
+        [CXType_BFloat16] = "bfloat16"
         /* TODO: Machine specific types
          * CXType_Float128: '__float128' in i386, x86_64, IA-64
-         * CXType_Half: 'half' in OpenCL, '__fp16' in ARM NEON.
-         * CXType_Float16: see https://reviews.llvm.org/D33719
          */
     };
+    enum CXTypeKind element_kind = kind;
+    const char *name = NULL;
+
+    if (kind == CXType_Complex || kind == CXType_Vector) {
+        /* The element type can be a typedef or (e.g., __bf16) unexposed. */
+        element_kind = clang_getCanonicalType(clang_getElementType(type)).kind;
+    }
+    if (element_kind < sizeof(map) / sizeof(map[0])) {
+        name = map[element_kind];
+    }
+    if (name == NULL) {
+        CXString kind_spelling = clang_getTypeKindSpelling(element_kind);
+        CXString type_spelling = clang_getTypeSpelling(type);
+        fprintf(stderr, "warning: no FFI type for %s (%s); using void\n",
+                clang_getCString(kind_spelling),
+                clang_getCString(type_spelling));
+        clang_disposeString(type_spelling);
+        clang_disposeString(kind_spelling);
+        name = "void";
+    }
     if (kind == CXType_Complex) {
-        fprintf(ffifile, "(complex-%s ())", map[clang_getElementType(type).kind]);
-    } else if (kind == CXType_Vector) {
-        // fprintf(ffifile, "(__vector-%s ())", map[clang_getElementType(type).kind]);
-	fprintf(ffifile, "(%s ())", map[clang_getElementType(type).kind]);
+        fprintf(ffifile, "(complex-%s ())", name);
     } else {
-        fprintf(ffifile, "(%s ())", map[kind]);
+        /* A vector is represented as its element type. */
+        fprintf(ffifile, "(%s ())", name);
     }
 }
 
