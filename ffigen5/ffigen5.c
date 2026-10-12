@@ -258,6 +258,30 @@ int is_c_primitive_type(enum CXTypeKind kind)
         !is_objc_additional_type(kind);
 }
 
+/*
+ * Some versions of libclang (e.g., Apple's) report certain builtin
+ * types, such as __bf16, as CXType_Unexposed.  Recognize them by
+ * the spelling of the canonical type.
+ */
+const char *unexposed_builtin_type_name(CXType type)
+{
+    CXString spelling = clang_getTypeSpelling(clang_getCanonicalType(type));
+    const char *s = clang_getCString(spelling);
+    const char *name = NULL;
+
+    if (strcmp(s, "__bf16") == 0) {
+        name = "bfloat16";
+    } else if (strcmp(s, "__mfp8") == 0) {
+        /*
+         * An 8-bit floating-point type whose format is chosen at
+         * runtime.  There's no better FFI type for it.
+         */
+        name = "unsigned-char";
+    }
+    clang_disposeString(spelling);
+    return name;
+}
+
 void format_c_primitive_type(CXType type, enum CXTypeKind kind)
 {
     static char * map[] = {
@@ -297,15 +321,20 @@ void format_c_primitive_type(CXType type, enum CXTypeKind kind)
          * CXType_Float128: '__float128' in i386, x86_64, IA-64
          */
     };
+    CXType element_type = type;
     enum CXTypeKind element_kind = kind;
     const char *name = NULL;
 
     if (kind == CXType_Complex || kind == CXType_Vector) {
         /* The element type can be a typedef or (e.g., __bf16) unexposed. */
-        element_kind = clang_getCanonicalType(clang_getElementType(type)).kind;
+        element_type = clang_getCanonicalType(clang_getElementType(type));
+        element_kind = element_type.kind;
     }
     if (element_kind < sizeof(map) / sizeof(map[0])) {
         name = map[element_kind];
+    }
+    if (name == NULL && element_kind == CXType_Unexposed) {
+        name = unexposed_builtin_type_name(element_type);
     }
     if (name == NULL) {
         CXString kind_spelling = clang_getTypeKindSpelling(element_kind);
@@ -377,6 +406,27 @@ void format_enum_reference(CXType type)
 void format_typedef_reference(CXType type)
 {
     CXCursor typedef_def = clang_getTypeDeclaration(type);
+    CXFile file;
+
+    /*
+     * A typedef with no source file is one that the compiler
+     * predefines (e.g., __mfp8).  Since there won't be a definition
+     * for it in the output, refer to the underlying type instead.
+     */
+    clang_getSpellingLocation(clang_getCursorLocation(typedef_def),
+                              &file, NULL, NULL, NULL);
+    if (file == NULL) {
+        CXType canonical = clang_getCanonicalType(type);
+
+        if (canonical.kind == CXType_Unexposed) {
+            const char *name = unexposed_builtin_type_name(canonical);
+
+            if (name) {
+                fprintf(ffifile, "(%s ())", name);
+                return;
+            }
+        }
+    }
     fprintf(ffifile, "(typedef \"");
     format_ident_name(typedef_def);
     fprintf(ffifile, "\")");
@@ -615,6 +665,16 @@ void format_type_reference(CXType type)
     case CXType_VariableArray:
 	format_variable_array(type);
 	break;
+    case CXType_Unexposed:
+        {
+            const char *name = unexposed_builtin_type_name(type);
+
+            if (name) {
+                fprintf(ffifile, "(%s ())", name);
+                break;
+            }
+        }
+        /* FALLTHROUGH */
     default:
         fprintf(stderr, "Error: reference type %s not implemented.\n", clang_getCString(type_kind_name));
     }
