@@ -1160,8 +1160,11 @@ visit_field(CXCursor cursor, CXCursor parent, CXClientData client_data)
     } else if (kind == CXCursor_UnionDecl || kind == CXCursor_StructDecl ||
                kind == CXCursor_EnumDecl) {
         /* don't do anything; we emitted these types during preflight */
-    } else if (kind == CXCursor_AlignedAttr) {
-        /* we don't do anything about this attribute */
+    } else if (clang_isAttribute(kind)) {
+        /*
+         * Attributes on the record (aligned, objc_bridge, etc.) show up
+         * as children, but they aren't fields; ignore them.
+         */
     } else {
         /* We may be confused */
         CXSourceLocation location = clang_getCursorLocation(cursor);
