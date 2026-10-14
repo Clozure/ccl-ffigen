@@ -2,10 +2,17 @@
 
 set -e
 
+# Work in the directory containing this script, since we're about to
+# delete and recreate output directories.
+cd "$(dirname "$0")"
+if [ "$(basename "$PWD")" != C ]; then
+    echo "translate.sh must live in an interface's C directory" >&2
+    exit 1
+fi
 rm -rf ./usr ./Applications ./Library ./System
 
 if [ -z "${FFIGEN}" ]; then
-    HERE=$(cd "$(dirname "$0")" && pwd)
+    HERE=$(pwd)
     if [ -x "${HERE}/../../../ffigen5/ffigen5" ]; then
         FFIGEN="${HERE}/../../../ffigen5/ffigen5"
     elif [ -x "${HERE}/../../ffigen5/ffigen5" ]; then
@@ -16,7 +23,7 @@ if [ -z "${FFIGEN}" ]; then
 fi
 
 if [ -z "${FILTER_FFI}" ]; then
-    HERE=$(cd "$(dirname "$0")" && pwd)
+    HERE=$(pwd)
     if [ -x "${HERE}/../../../filter_ffi.py" ]; then
         FILTER_FFI="${HERE}/../../../filter_ffi.py"
     elif [ -x "${HERE}/../../filter_ffi.py" ]; then
