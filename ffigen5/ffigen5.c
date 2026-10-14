@@ -286,7 +286,8 @@ void format_c_primitive_type(CXType type, enum CXTypeKind kind)
 {
     static char * map[] = {
         [CXType_Void] = "void",
-        [CXType_Bool] = "unsigned",
+        /* C bool (_Bool) is one byte. */
+        [CXType_Bool] = "unsigned-char",
         [CXType_Char_U] = "unsigned-char",
         [CXType_UChar] = "unsigned-char",
         [CXType_UShort] = "unsigned-short",
