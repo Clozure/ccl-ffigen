@@ -432,10 +432,10 @@ void format_typedef_reference(CXType type)
 
     /*
      * A typedef with no source file is one that the compiler
-     * predefines (e.g., instancetype, __builtin_va_list, __mfp8).
-     * Since there won't be a definition for it in the output, refer
-     * to the underlying type instead.  Types with no FFI equivalent
-     * (e.g., __int128_t) are left as typedef references.
+     * predefines (e.g., instancetype, __builtin_va_list, __mfp8,
+     * __uint128_t).  Since there won't be a definition for it in the
+     * output, refer to the underlying type instead.  Other kinds of
+     * types are left as typedef references.
      */
     clang_getSpellingLocation(clang_getCursorLocation(typedef_def),
                               &file, NULL, NULL, NULL);
@@ -444,6 +444,8 @@ void format_typedef_reference(CXType type)
         const char *name;
 
         switch (canonical.kind) {
+        case CXType_Int128:
+        case CXType_UInt128:
         case CXType_Pointer:
         case CXType_ObjCObjectPointer:
         case CXType_ObjCId:
