@@ -22,18 +22,6 @@ if [ -z "${FFIGEN}" ]; then
     fi
 fi
 
-if [ -z "${FILTER_FFI}" ]; then
-    HERE=$(pwd)
-    if [ -x "${HERE}/../../../filter_ffi.py" ]; then
-        FILTER_FFI="${HERE}/../../../filter_ffi.py"
-    elif [ -x "${HERE}/../../filter_ffi.py" ]; then
-        FILTER_FFI="${HERE}/../../filter_ffi.py"
-    else
-        echo "Cannot find filter_ffi.py" >&2
-        exit 1
-    fi
-fi
-
 if [ -z "${SDK}" ]; then
     SDK=$(xcrun --show-sdk-path)
 fi
@@ -72,9 +60,6 @@ translate()
         echo "WARN: ffigen failed: $1" >&2
         rm -f "$output_path"
         exit 0
-    fi
-    if [ -f "$output_path" ]; then
-        python3 $FILTER_FFI "$output_path"
     fi
 }
 

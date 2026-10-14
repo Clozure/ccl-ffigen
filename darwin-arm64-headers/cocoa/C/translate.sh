@@ -22,18 +22,6 @@ if [ -z "${FFIGEN}" ]; then
     fi
 fi
 
-if [ -z "${FILTER_FFI}" ]; then
-    HERE=$(pwd)
-    if [ -x "${HERE}/../../../filter_ffi.py" ]; then
-        FILTER_FFI="${HERE}/../../../filter_ffi.py"
-    elif [ -x "${HERE}/../../filter_ffi.py" ]; then
-        FILTER_FFI="${HERE}/../../filter_ffi.py"
-    else
-        echo "Cannot find filter_ffi.py" >&2
-        exit 1
-    fi
-fi
-
 if [ -z "${SDK}" ]; then
     SDK=$(xcrun --show-sdk-path)
 fi
@@ -73,9 +61,6 @@ translate()
         rm -f "$output_path"
         exit 0
     fi
-    if [ -f "$output_path" ]; then
-        FILTER_FFI_MACROS=frameworks python3 $FILTER_FFI "$output_path"
-    fi
 }
 
 # ObjC runtime (C headers still useful under objective-c mode)
@@ -85,6 +70,7 @@ for h in \
   "${SDK}/usr/include/objc/objc-runtime.h" \
   "${SDK}/usr/include/objc/objc-exception.h" \
   "${SDK}/usr/include/objc/NSObject.h" \
+  "${SDK}/usr/include/objc/Protocol.h" \
   "${SDK}/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h" \
   "${SDK}/System/Library/Frameworks/AppKit.framework/Headers/AppKit.h"
 do

@@ -403,36 +403,60 @@ void format_enum_reference(CXType type)
     fprintf(ffifile, "\")");
 }
 
+void format_type_reference(CXType type);
+
 void format_typedef_reference(CXType type)
 {
     CXCursor typedef_def = clang_getTypeDeclaration(type);
     CXFile file;
 
     /*
+     * An Objective-C lightweight generic type parameter (e.g.,
+     * ObjectType in NSArray<ObjectType>) looks like a typedef, but
+     * nothing defines it.  Refer to its underlying type (typically
+     * id) instead.
+     */
+    if (clang_getCursorKind(typedef_def) == CXCursor_TemplateTypeParameter) {
+        format_type_reference(clang_getTypedefDeclUnderlyingType(typedef_def));
+        return;
+    }
+
+    /*
      * A typedef with no source file is one that the compiler
-     * predefines (e.g., __mfp8).  Since there won't be a definition
-     * for it in the output, refer to the underlying type instead.
+     * predefines (e.g., instancetype, __builtin_va_list, __mfp8).
+     * Since there won't be a definition for it in the output, refer
+     * to the underlying type instead.  Types with no FFI equivalent
+     * (e.g., __int128_t) are left as typedef references.
      */
     clang_getSpellingLocation(clang_getCursorLocation(typedef_def),
                               &file, NULL, NULL, NULL);
     if (file == NULL) {
         CXType canonical = clang_getCanonicalType(type);
+        const char *name;
 
-        if (canonical.kind == CXType_Unexposed) {
-            const char *name = unexposed_builtin_type_name(canonical);
-
+        switch (canonical.kind) {
+        case CXType_Pointer:
+        case CXType_ObjCObjectPointer:
+        case CXType_ObjCId:
+        case CXType_ObjCClass:
+        case CXType_ObjCSel:
+            format_type_reference(canonical);
+            return;
+        case CXType_Unexposed:
+            name = unexposed_builtin_type_name(canonical);
             if (name) {
                 fprintf(ffifile, "(%s ())", name);
                 return;
             }
+            break;
+        default:
+            break;
         }
     }
     fprintf(ffifile, "(typedef \"");
     format_ident_name(typedef_def);
     fprintf(ffifile, "\")");
 }
-
-void format_type_reference(CXType type);
 
 void format_array(CXType type)
 {
@@ -540,14 +564,25 @@ void format_function_no_proto(CXType type)
     fprintf(ffifile, "(void ())");
 }
 
+void format_objc_id(CXType type);
+void format_objc_class(CXType type);
+
 void format_objc_object_pointer(CXType type)
 {
     CXType pointee = getPointeeType(type); // necessary?
-    // TODO: add handler code to deal with protocol-qualified types
-    /* if (clang_Type_getNumObjCProtocolRefs(pointee) > 0) { */
-    /* 	pointee = clang_Type_getObjCObjectBaseType(pointee); */
-    /* } */
+
+    /*
+     * The base type drops any protocol qualifiers, so id<NSCopying>
+     * becomes id, and NSObject<NSCopying> * becomes NSObject *.
+     */
     pointee = clang_Type_getObjCObjectBaseType(pointee);
+    if (pointee.kind == CXType_ObjCId) {
+        format_objc_id(pointee);
+        return;
+    } else if (pointee.kind == CXType_ObjCClass) {
+        format_objc_class(pointee);
+        return;
+    }
     CXString pointee_type_name = clang_getTypeSpelling(pointee);
     fprintf(ffifile, "(pointer (struct-ref \"%s\"))", clang_getCString(pointee_type_name));
     clang_disposeString(pointee_type_name);
@@ -681,8 +716,46 @@ void format_type_reference(CXType type)
     clang_disposeString(type_kind_name);
 }
 
+/*
+ * Treat a static const variable with an integer value (e.g.,
+ * NSOnState in NSCell.h) as a named constant (which it is: it creates
+ * nothing to link against).  If the variable is one of those, emit
+ * its value as an enum-ident and return non-zero.
+ */
+int process_static_const_int(CXCursor cursor, CXString filename, unsigned line, CXString ident, CXType type)
+{
+    CXEvalResult result;
+    int done = 0;
+
+    if (clang_Cursor_getStorageClass(cursor) != CX_SC_Static ||
+        !clang_isConstQualifiedType(type)) {
+        return 0;
+    }
+    result = clang_Cursor_Evaluate(cursor);
+    if (result == NULL) {
+        return 0;
+    }
+    if (clang_EvalResult_getKind(result) == CXEval_Int) {
+        fprintf(ffifile, "(enum-ident (\"%s\" %u)\n \"%s\" ",
+                clang_getCString(filename), line, clang_getCString(ident));
+        if (clang_EvalResult_isUnsignedInt(result)) {
+            fprintf(ffifile, "%llu)\n",
+                    clang_EvalResult_getAsUnsigned(result));
+        } else {
+            fprintf(ffifile, "%lld)\n",
+                    clang_EvalResult_getAsLongLong(result));
+        }
+        done = 1;
+    }
+    clang_EvalResult_dispose(result);
+    return done;
+}
+
 void process_var_decl(CXCursor cursor, CXString filename, unsigned line, CXString ident, CXType type)
 {
+    if (process_static_const_int(cursor, filename, line, ident, type)) {
+        return;
+    }
     fprintf(ffifile, "(var (\"%s\" %u)\n", clang_getCString(filename), line);
     fprintf(ffifile, " \"%s\"\n", clang_getCString(ident));
     fprintf(ffifile, " ");
