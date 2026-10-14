@@ -152,21 +152,29 @@ void process_macro_definition(CXCursor cursor, CXString filename, unsigned line)
 
 /*
  * Print ident name if it's not anonymous, otherwise print it as
- * linenum_filename
+ * line_column_filename.  (parse-ffi treats a name that starts with a
+ * digit as anonymous.)
+ *
+ * Recent versions of libclang give an anonymous struct, union, or
+ * enum a spelling like "struct (unnamed at /path/to/file.h:12:3)",
+ * so check for anonymity explicitly rather than for an empty name.
+ * A record named by a typedef (typedef struct { ... } foo_t) isn't
+ * anonymous, and gets the typedef's name.
  */
 void format_ident_name(CXCursor cursor)
 {
     CXSourceLocation location;
-    unsigned line;
+    unsigned line, column;
     CXFile file;
     CXString filename;
     CXString name;
 
     name = clang_getCursorSpelling(cursor);
 
-    if (strlen(clang_getCString(name)) == 0) {
+    if (clang_Cursor_isAnonymous(cursor) ||
+        strlen(clang_getCString(name)) == 0) {
         location = clang_getCursorLocation(cursor);
-        clang_getSpellingLocation(location, &file, &line, NULL, NULL);
+        clang_getSpellingLocation(location, &file, &line, &column, NULL);
         filename = clang_File_tryGetRealPathName(file);
         const char *path = clang_getCString(filename);
         if (strcmp(path, "") == 0) {
@@ -175,7 +183,7 @@ void format_ident_name(CXCursor cursor)
             path = clang_getCString(filename);
         }
         char *mutable_path = strdup(path);
-        fprintf(ffifile, "%u_%s", line, basename(mutable_path));
+        fprintf(ffifile, "%u_%u_%s", line, column, basename(mutable_path));
         free(mutable_path);
         clang_disposeString(filename);
     } else {
