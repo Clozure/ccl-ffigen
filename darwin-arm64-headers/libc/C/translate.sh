@@ -55,7 +55,7 @@ translate()
     mkdir -p "$output_dir"
     output_file="`basename $1 .h`.ffi"
     output_path="$output_dir/$output_file"
-    echo $1 $other_flags $includes
+    echo "$1 $other_flags $includes" | sed "s|$SDK||g"
     if ! "$FFIGEN" $platform_flags $other_flags -x c $includes "$1" -o "$output_path"; then
         echo "WARN: ffigen failed: $1" >&2
         rm -f "$output_path"
@@ -462,7 +462,7 @@ translate ${SDK}/usr/include/security/pam_constants.h
 translate ${SDK}/usr/include/security/pam_modules.h
 translate ${SDK}/usr/include/security/pam_types.h
 translate ${SDK}/usr/include/paths.h
-translate -include ${SDK}/usr/include/sys/types.h -include ${SDK}/usr/include/sys/time.h -include ${SDK}/usr/include/net/bpf.h -include ${SDK}/usr/include/stdio.h ${SDK}/usr/include/pcap-namedb.h
+translate -include ${SDK}/usr/include/pcap.h ${SDK}/usr/include/pcap-namedb.h
 translate ${SDK}/usr/include/pcap.h
 #translate ${SDK}/usr/include/pexpert/boot.h
 #translate ${SDK}/usr/include/pexpert/pexpert.h

@@ -55,7 +55,7 @@ translate()
     mkdir -p "$output_dir"
     output_file="`basename $1 .h`.ffi"
     output_path="$output_dir/$output_file"
-    echo $1 $other_flags $includes
+    echo "$1 $other_flags $includes" | sed "s|$SDK||g"
     if ! "$FFIGEN" $platform_flags $other_flags -x c $includes "$1" -o "$output_path"; then
         echo "WARN: ffigen failed: $1" >&2
         rm -f "$output_path"
